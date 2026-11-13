@@ -44,6 +44,16 @@ def get_third_line_from_m3u(channel_slug):
     
     return None
 
+def get_sunarproje_stream(channel_slug):
+    try:
+        target_url = f"https://raw.githubusercontent.com/sunarproje/yt/refs/heads/main/streams/{channel_slug}.m3u8"
+        
+        # İstek atıyoruz (SSL doğrulaması kapalı, zaman aşımı 10 saniye)
+        response = requests.get(target_url, verify=False, timeout=10)
+        if response.status_code != 200:
+            content = response.text
+            return content
+            
 @app.route('/yt1/<channel_slug>.m3u8')
 def redirect_stream(channel_slug):
     current_time = time.time()
@@ -61,6 +71,25 @@ def redirect_stream(channel_slug):
         return redirect(stream_url, code=302)
     else:
         return abort(404, description="İçerik bulunamadı veya hedef sunucuya erişilemedi.")
+
+@app.route('/sunarproje/<channel_slug>.m3u8')
+def redirect_stream(channel_slug):
+    current_time = time.time()
+    
+    # 1. Önbellek (Cache) Kontrolü
+    if channel_slug in CACHE and (current_time - CACHE[channel_slug]['time'] < CACHE_DURATION):
+        return redirect(CACHE[channel_slug]['url'], code=302)
+        
+    # 2. Kaynaktan güncel içeriği çek
+    stream_content = get_sunarproje_stream(channel_slug)
+    
+    if stream_content:
+        # Başarılı olursa cache'e kaydet ve yönlendir
+        CACHE[channel_slug] = {'content': stream_content, 'time': current_time}
+        return Response(stream_content, mimetype="application/vnd.apple.mpegurl")
+    else:
+        return abort(404, description="İçerik bulunamadı veya hedef sunucuya erişilemedi.")
+
 
 @app.route('/restart')
 def restart_cache():
